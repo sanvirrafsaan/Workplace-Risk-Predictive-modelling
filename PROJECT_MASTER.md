@@ -95,9 +95,9 @@ When a subtask chat finishes, come back here and update **Progress tracker** bel
 
 | Phase | Status | Artifact |
 |---|---|---|
-| 0. Setup & decisions | 🟡 In progress | `decision_log.md` seeded; Python env in `.venv` |
-| 1. Target & evaluation design | ⬜ Not started | Decision D004–D006 |
-| 2. Data exploration (EDA) | ⬜ Not started | `notebooks/01_eda.ipynb` |
+| 0. Setup & decisions | ✅ Done | D001–D009 accepted in `decision_log.md` |
+| 1. Target & evaluation design | ✅ Done | D004, D005, D008 locked via EDA |
+| 2. Data exploration (EDA) | 🟡 In progress | `scripts/01_data_exploration.ipynb` |
 | 3. Modeling table | ⬜ Not started | `notebooks/02_modeling_table.ipynb` |
 | 4. Features | ⬜ Not started | Feature list in decision log |
 | 5. Baseline model + metrics | ⬜ Not started | `notebooks/03_model.ipynb` |
@@ -132,4 +132,4 @@ When a subtask chat finishes, come back here and update **Progress tracker** bel
 ## Last updated
 
 - Date: 2026-06-05
-- By: Master chat setup
+- By: Phase 0 closed — D004/D005/D007/D008/D009 accepted after EDA

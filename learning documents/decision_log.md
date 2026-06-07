@@ -90,7 +90,7 @@
 
 ### D004 — Target variable
 **Date:** 2026-06-05  
-**Status:** **Proposed — YOU MUST FINALIZE IN PHASE 0**
+**Status:** Accepted
 
 **Context:** Need a learnable label that proxies "high risk" without predicting individual accidents.
 
@@ -100,20 +100,19 @@
 3. Critical injury / fatality (too rare)
 4. Composite severity score across order types
 
-**Decision:** *(Fill in after you inspect order type counts in EDA)*  
-**Recommended starting point:** Binary — workplace receives ≥1 **Stop Work** OR **Time Unknown** order in 2023, with features from 2017–2022.
+**Decision:** Binary target at **workplace** grain — workplace receives ≥1 **Stop Use/Stop Work Order** OR **Time Unknown Order** in calendar year **2023**. Features come from 2017–2022. Evaluation cohort: workplaces with history (2017–2022) **and** a 2023 visit (~12,234 workplaces, **~8.0%** positive rate). Among all 2023 visits the rate is **~9.3%**.
 
-**Rationale:** Stop works and time-unknown orders are defined in the data dictionary as signaling immediate danger. More learnable than fatalities; more meaningful than any order.
+**Rationale:** Data dictionary defines stop works and time-unknown orders as signaling immediate risk of injury. EDA confirmed enough volume (~14k row-level serious orders in 2023) and a learnable workplace-level base rate. More meaningful than "any order"; far more learnable than fatalities.
 
-**Trade-offs:** Proxy ≠ actual harm; reactive investigations inflate labels; selection bias (only inspected workplaces).
+**Trade-offs:** Proxy ≠ actual harm; reactive investigations inflate labels; selection bias (only inspected workplaces have observed labels).
 
-**Validation:** Check base rate in 2023; optionally correlate high scores with WSIB fatality sectors (narrative only).
+**Validation:** 2023 base rate ~9.3% (all visited) / ~8.0% (return-visit cohort). 2022 rate ~9.1% — stable enough to trust out-of-time design. Fatalities file used for narrative validation only, not training.
 
 ---
 
 ### D005 — Train / test split
 **Date:** 2026-06-05  
-**Status:** **Proposed — confirm in Phase 0**
+**Status:** Accepted
 
 **Context:** Must validate the way the model will be used in production.
 
@@ -122,11 +121,11 @@
 2. **Out-of-time:** features ≤2022, target in 2023
 3. Out-of-time: features ≤2021, target in 2022 (robustness check)
 
-**Decision:** Out-of-time with features through end of 2022, target in 2023. Optional second check on 2022 target.
+**Decision:** Out-of-time — features through **2022-12-31**, target = serious order in **2023**. Prototype uses **2017–2023** files only (2024 held back until schema map exists). Optional robustness check: features ≤2021 → target 2022 (~9.1% serious rate).
 
-**Rationale:** Simulates "score workplaces today using history, inspect next year." Prevents temporal leakage.
+**Rationale:** Simulates "score workplaces using history, inspect next year." 2022 and 2023 serious-order rates are within ~0.2 pp, so one test year is defensible.
 
-**Trade-offs:** Single test year; COVID-era 2020–2021 may distort patterns.
+**Trade-offs:** Single primary test year; COVID-era 2020–2021 may distort some patterns (mitigated by 5-year feature window).
 
 ---
 
@@ -149,22 +148,106 @@
 
 ---
 
-## Pending decisions (fill as you go)
-
 ### D007 — Schema normalization across years
-**Status:** Pending — Phase 1 EDA
+**Date:** 2026-06-05  
+**Status:** Accepted
+
+**Context:** OHS field visit files differ across years; need a stackable subset for the prototype.
+
+**Options considered:**
+1. Stack all years 2017–2024 as-is
+2. Stack 2017–2023 with a shared column subset; handle 2024 separately
+3. Use 2023 only
+
+**Decision:** Stack **2017–2023** using core columns (`WORKPLACE ID`, `ORDER TYPE`, `CASE TYPE`, `FIELD VISIT DATE`, `PRIMARY NAICS`, `ORDER STATUS`). Drop extra 2021–2022 columns (`FIELD VISIT ID`, `ORDER ID`, `Unnamed: 0`) when concatenating. **Do not mix 2024 into the modeling table yet** — different column names and order-type strings.
+
+**Rationale:** EDA showed 2020 matches 2023 schema; 2021–2022 add harmless extra ID columns; 2024 renames ACT/contravener fields and splits stop-work labels.
+
+**Trade-offs:** Cannot use 2024 as test year without a rename map (D009).
+
+---
 
 ### D008 — Snapshot / feature window design
-**Status:** Pending — Phase 2
+**Date:** 2026-06-05  
+**Status:** Accepted
+
+**Context:** Need a clear point-in-time design to avoid leakage.
+
+**Options considered:**
+1. One row per workplace with all history ever
+2. **Snapshot at 2022-12-31**, target in 2023
+3. Rolling 12-month windows
+
+**Decision:** Snapshot **2022-12-31**. Features = all visits/orders for that workplace in **2017–2022**. Target = serious order in **2023**. **Evaluation cohort** = workplaces with ≥1 visit in 2017–2022 **and** ≥1 visit in 2023 (~12,234 rows, ~8% positive). Operationally the model would score the full historical backlog; labels are only observed where inspection occurred.
+
+**Rationale:** EDA showed that including all historical workplaces without a 2023 visit drops the positive rate to ~0.6% — most zeros mean "never inspected," not "low risk." Restricting evaluation to re-inspected workplaces gives honest labels.
+
+**Trade-offs:** Smaller evaluation set; scores for never-revisited workplaces remain extrapolations (see D006).
+
+---
 
 ### D009 — Serious order type string mapping
-**Status:** Pending — Phase 2 (order types changed casing 2023→2024)
+**Date:** 2026-06-05  
+**Status:** Accepted
+
+**Context:** Order type labels changed between 2023 and 2024.
+
+**Decision:**
+- **2023:** `Stop Use/Stop Work Order`, `Time Unknown Order`
+- **2024:** `Time unknown order`, `STOP A057-6a/b/c/8` (four stop-work subtypes)
+
+Use year-specific sets when labeling; do not assume one string works across years.
+
+**Rationale:** Data dictionary defines the same serious concepts; open data just changed granularity/casing in 2024.
+
+**Trade-offs:** Any cross-year target needs explicit mapping, not a single hardcoded list.
+
+---
 
 ### D010 — Model choice (logistic vs boosting primary)
-**Status:** Pending — Phase 3
+**Date:** 2026-06-07  
+**Status:** Accepted
+
+**Context:** Need a fast, interpretable baseline for the prototype and interview deck.
+
+**Options considered:**
+1. Logistic regression — linear, coefficient interpretability, fast
+2. Gradient boosting (LightGBM/XGBoost) — higher AUC potential, less interpretable
+3. Both — logistic primary, boosting as robustness check
+
+**Decision:** **Logistic regression** as primary model. `log1p()` on count features; NAICS rolled to 2-digit sector; `class_weight='balanced'`.
+
+**Rationale:** Assignment prioritizes interpretable drivers for Slide 3 and a single lift number for Slide 4. Logistic delivered **4.1× lift** in top decile with clear coefficients. Boosting optional if time permits.
+
+**Trade-offs:** Misses nonlinear interactions; sector dummies dominate some coefficients.
+
+**Validation:** Top-decile serious-order rate **32.5%** vs **8.0%** baseline; PR-AUC 0.32, ROC-AUC 0.81 on full 2023 cohort.
+
+---
 
 ### D011 — Primary evaluation metric
-**Status:** Pending — Phase 3 (recommended: lift@top decile)
+**Date:** 2026-06-07  
+**Status:** Accepted
+
+**Context:** Ministry use case is **prioritizing inspections** — care about concentration of serious orders in highest-scored workplaces, not overall accuracy.
+
+**Options considered:**
+1. Accuracy — misleading at 8% base rate
+2. ROC-AUC — threshold-free but not aligned to top-K targeting
+3. **Lift@top decile** — rate in top 10% scored vs baseline
+4. PR-AUC — good for imbalanced data, secondary
+
+**Decision:** **Lift@top 10%** primary; **PR-AUC** secondary; ROC-AUC reported for completeness.
+
+**Rationale:** Directly answers "if we inspect the top 10% scored, how much richer in serious orders vs random?" Prototype result: **4.1× lift** (32.5% vs 8.0%).
+
+**Trade-offs:** Single decile cutoff; doesn't measure calibration across full score range (decile chart supplements).
+
+**Validation:** Monotonic lift across deciles 1→10 in `data/processed/lift_chart.png`.
+
+---
+
+## Pending decisions (fill as you go)
 
 ### D012 — WSIB join vs slide mention only
 **Status:** Pending — Phase 5
