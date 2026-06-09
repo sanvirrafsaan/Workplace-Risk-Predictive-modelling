@@ -1,0 +1,16 @@
+{
+  "source_report": "Sample Report 2 — Fake Ontario Metal Fabric Co. (de-identified)",
+  "deidentified_input": "On March 17, 2025, at approximately 2:30 PM, a catastrophic mechanical failure occurred in the staging area of Bay 4 (Tube & Extrusion Finishing). A temporary heavy-duty metal holding rack used to secure bundles of industrial structural steel tubes suffered a structural failure. A retaining pin sheared off under load.\n\nApproximately twelve heavy structural steel tubes—each weighing roughly 450 kg—became unrestrained and rolled down the staging incline. Two production workers in the transit path were struck and run over, sustaining critical, life-threatening crush injuries. Emergency services were dispatched and the Ministry was notified.\n\nInterviews and shift logs showed a gross absence of mandatory competent supervision:\n- The designated Bay 4 Area Supervisor was reassigned to a morning production meeting. No competent alternate was appointed.\n- The supervisor instructed Worker A (21 years old, 3 weeks on the job) and Worker B (24 years old, 11 months on the job) to clear floor debris downstream of an uncertified staging rack. New workers complied with a high-risk directive without understanding their exposure.\n\nPost-incident PPE audit: both workers were in full compliance with plant PPE requirements. Standard PPE offers no protection against catastrophic crush involving approximately 5,400 kg of rolling steel. The failure was systemic and mechanical, not a failure of personal compliance.\n\nOrders: OHSA section 25(2)(a) (failure to provide information, instruction, and supervision—especially for new/young workers); Reg 851 Section 7 (failure to conduct an engineering pre-start health and safety review on modified metal holders).",
+  "extracted_features": {
+    "hazard_type": "caught-in / crush (rolling structural steel)",
+    "injury_severity": "critical",
+    "vulnerable_worker_flag": true,
+    "supervision_failure_flag": true,
+    "systemic_failure_flag": true,
+    "ppe_relevant_to_outcome": false,
+    "order_sections": [
+      "OHSA 25(2)(a)",
+      "Reg 851 s.7"
+    ]
+  }
+}

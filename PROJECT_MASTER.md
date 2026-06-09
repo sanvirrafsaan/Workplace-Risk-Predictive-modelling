@@ -58,9 +58,9 @@ MLITSD-DS-Project/
 ├── learning documents/
 │   ├── decision_log.md        ← every major choice + trade-offs
 │   └── concept_log.md         ← things you learned (optional, lightweight)
-├── data/                      ← raw downloads (do not edit)
-├── src/
-│   └── notebooks/             ← your analysis notebooks
+├── data/
+│   └── processed/             ← modeling_table.csv, lift_chart.png
+├── scripts/                   ← analysis notebooks (01_eda → 03_model)
 ├── slides/                    ← final 5-slide deck
 └── AI_USAGE.md                ← required by brief
 ```
@@ -95,16 +95,28 @@ When a subtask chat finishes, come back here and update **Progress tracker** bel
 
 | Phase | Status | Artifact |
 |---|---|---|
-| 0. Setup & decisions | ✅ Done | D001–D009 accepted in `decision_log.md` |
-| 1. Target & evaluation design | ✅ Done | D004, D005, D008 locked via EDA |
-| 2. Data exploration (EDA) | 🟡 In progress | `scripts/01_data_exploration.ipynb` |
-| 3. Modeling table | ⬜ Not started | `notebooks/02_modeling_table.ipynb` |
-| 4. Features | ⬜ Not started | Feature list in decision log |
-| 5. Baseline model + metrics | ⬜ Not started | `notebooks/03_model.ipynb` |
-| 6. LLM text demo | ⬜ Not started | JSON extraction example |
-| 7. Charts for slides | ⬜ Not started | lift chart, feature importance |
-| 8. 5-slide deck | ⬜ Not started | `slides/` |
-| 9. Rehearsal + AI_USAGE | ⬜ Not started | `AI_USAGE.md` |
+| 0. Setup & decisions | ✅ Done | D001–D009 in `decision_log.md` |
+| 1. EDA | ✅ Done | `scripts/01_data_exploration.ipynb` |
+| 2. Modeling table | ✅ Done | `scripts/02_modeling_table.ipynb`, `data/processed/modeling_table.csv` |
+| 3. Baseline model + lift | ✅ Done | `scripts/03_model.ipynb`, `data/processed/lift_chart.png`, D010–D011 |
+| 4. LLM text demo | ✅ Done | `data/processed/llm_extraction_example.json`, D013 |
+| 4b. Boosting robustness + importance | ✅ Done | `scripts/04_boosting_shap.ipynb`, `data/processed/feature_importance.png`, D014 |
+| 5. 5-slide deck | 🟡 Outline + script ready | `slides/SLIDE_DECK_OUTLINE.md`, `slides/PRESENTATION_SCRIPT.md` (build in PowerPoint) |
+| 6. Rehearsal + AI_USAGE | ⬜ Next | rehearse from script; `AI_USAGE.md` |
+
+## Key results (for slides)
+
+| Metric | Value |
+|---|---|
+| Cohort | 12,234 workplaces (12,230 after 4 NAICS-null drops in model) |
+| Baseline serious-order rate | 8.0% |
+| Top-decile rate | 32.5% (in-sample) / ~32% cross-validated |
+| **Lift @ top 10% (logistic, primary)** | **~4.0×** (in-sample 4.08×, cross-validated 4.00×) |
+| Lift @ top 10% (LightGBM, CV check) | 3.73× — does **not** beat logistic → keep logistic |
+| PR-AUC / ROC-AUC (logistic, CV) | 0.31 / 0.80 |
+| Top drivers | Industry sector, prior orders/investigations, recency, compliance rate |
+
+> **Senior talking point (D014):** boosting tied logistic out-of-fold, so we keep the fully explainable model with no accuracy penalty. In-sample boosting showed an inflated 7.15× — a deliberate demonstration of why we cross-validate.
 
 ---
 
@@ -131,5 +143,5 @@ When a subtask chat finishes, come back here and update **Progress tracker** bel
 
 ## Last updated
 
-- Date: 2026-06-05
-- By: Phase 0 closed — D004/D005/D007/D008/D009 accepted after EDA
+- Date: 2026-06-09
+- By: Phases 0–4b complete; slide outline + script written. Next: build deck in PowerPoint + rehearse.

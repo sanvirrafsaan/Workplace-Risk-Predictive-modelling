@@ -17,7 +17,7 @@ python -m ipykernel install --user --name=mlitsd-ds --display-name="MLITSD DS"
 1. Activate the env: `source .venv/bin/activate`
 2. Start Jupyter: `jupyter lab` (or open `.ipynb` files in Cursor/VS Code)
 3. Select kernel **MLITSD DS**
-4. Work through `src/notebooks/` in order: `01_eda` → `02_modeling_table` → `03_model`
+4. Work through `scripts/` in order: `01_data_exploration` → `02_modeling_table` → `03_model`
 
 ## Project layout
 
@@ -27,7 +27,7 @@ python -m ipykernel install --user --name=mlitsd-ds --display-name="MLITSD DS"
 | `02_STEP_BY_STEP_PLAN.md` | Hour-by-hour checklist |
 | `data/` | Raw downloads (do not edit) |
 | `data/processed/` | Intermediate tables from notebooks |
-| `src/notebooks/` | Analysis notebooks |
+| `scripts/` | Analysis notebooks (`01` → `03`) |
 | `slides/` | Final 5-slide deck |
 | `learning documents/` | `decision_log.md`, `concept_log.md` |
 

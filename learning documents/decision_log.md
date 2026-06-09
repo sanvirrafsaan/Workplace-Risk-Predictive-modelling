@@ -247,7 +247,49 @@ Use year-specific sets when labeling; do not assume one string works across year
 
 ---
 
+### D013 — LLM / NLP approach
+**Date:** 2026-06-07  
+**Status:** Accepted
+
+**Context:** Inspection reports contain risk signal not in structured FIRE fields; brief requires LLM application.
+
+**Options considered:**
+1. Schema-constrained JSON extraction (de-identify → prompt → structured fields)
+2. Raw text embeddings fed to model (higher accuracy, low explainability)
+3. Full NLP pipeline (batch processing, fine-tuning)
+
+**Decision:** **Schema-constrained extraction** on de-identified text; demo on Sample Report 2 only. Production would use in-tenant Azure OpenAI; LLM structures text only — never assigns enforcement.
+
+**Rationale:** Explainable named features (`supervision_failure_flag`, etc.) are defensible to executives and join cleanly to the modeling table. Full pipeline out of scope for 5-slide deliverable.
+
+**Trade-offs:** Demo is manual/single-report; not validated at scale; embeddings may capture nuance we miss.
+
+**Validation:** `data/processed/llm_extraction_example.json` — steel-tube crush report → JSON aligned with report content.
+
+---
+
+### D014 — Boosting as robustness check; logistic stays primary
+**Date:** 2026-06-09  
+**Status:** Accepted
+
+**Context:** Need to confirm the logistic result (4.1× lift) is a real signal, not a linear-model artifact — and decide whether to switch to a more complex model.
+
+**Options considered:**
+1. Switch to gradient boosting as the primary model (max accuracy)
+2. Keep logistic primary; use boosting only as a robustness check
+3. Skip boosting entirely
+
+**Decision:** **Logistic stays primary; LightGBM is a robustness check** (`scripts/04_boosting_shap.ipynb`). Comparison done with **out-of-fold cross-validation** for both models (not in-sample).
+
+**Rationale:** In-sample, LightGBM showed an inflated 7.15× lift (ROC-AUC 0.97) — memorization. Cross-validated honestly, the models are tied: **logistic 4.00× / PR-AUC 0.311 vs LightGBM 3.73× / PR-AUC 0.284**. Boosting gives no lift, so the interpretable model wins for an enforcement setting (full explainability, no accuracy penalty).
+
+**Trade-offs:** Boosting might capture interactions with more tuning/data; we accept the simpler model deliberately.
+
+**Validation:** `data/processed/feature_importance.png` (permutation importance). SHAP unavailable in env (libllvmlite/numpy conflict) → used permutation importance, which is model-agnostic. Top drivers (sector, enforcement history, recency, compliance) match Phase 3 logistic coefficients.
+
+---
+
 ## Pending decisions (fill as you go)
 
 ### D012 — WSIB join vs slide mention only
-**Status:** Pending — Phase 5
+**Status:** Pending — optional for slides
