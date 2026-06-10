@@ -1,14 +1,38 @@
-# AI Tool Usage Log
+# AI Tool Usage
 
-> Required by assignment brief. Document every AI tool used, for what purpose, and when.
+The assignment brief requires that all use of AI tools be documented. This file summarizes how AI assistance was used in this project.
 
-| Date | Tool | Purpose | Output |
-|---|---|---|---|
-| 2026-06-04 | Cursor (Claude) | Case framing, solution design, execution plan | `00_STRATEGY_AND_PLAN.md`, `01_SOLUTION_Option1_Predictive_Risk.md`, `PROJECT_MASTER.md`, `02_STEP_BY_STEP_PLAN.md` |
-| 2026-06-05 | Cursor (Claude) | Phase 0 decision review; Phase 1 EDA guidance; subtask chat prompts | `decision_log.md` D004–D009; `scripts/01_data_exploration.ipynb` |
-| 2026-06-07 | Cursor (Claude) | Phase 2 modeling table guidance; Phase 3 logistic model + lift review | `scripts/02_modeling_table.ipynb`, `scripts/03_model.ipynb`, `modeling_table_dictionary.md` |
-| 2026-06-07 | Cursor (Claude) | Post-undo consistency audit; PROJECT_MASTER + AI_USAGE updates | This file, `PROJECT_MASTER.md` progress tracker |
+## Summary
 
-| 2026-06-07 | Cursor (Claude) | Phase 4 LLM extraction demo — de-identified Sample Report 2, schema-constrained JSON for Slide 3 | `data/processed/llm_extraction_example.json` |
-| 2026-06-09 | Cursor (Claude) | Phase 4b — LightGBM robustness check (cross-validated vs logistic) + permutation importance; D014 | `scripts/04_boosting_shap.ipynb`, `data/processed/feature_importance.png` |
-| 2026-06-09 | Cursor (Claude) | Slide deck outline + speaker script; repo consistency review; notebook transition cleanup | `slides/SLIDE_DECK_OUTLINE.md`, `slides/PRESENTATION_SCRIPT.md` |
+I used Cursor with Anthropic Claude models as a coding and drafting assistant during this project. AI was used as an accelerator for repetitive implementation tasks, documentation drafting, formatting, and code review support.
+
+All major analytical and design decisions were made by me, including:
+
+- defining the problem framing and proposed solution approach
+- selecting the target variable and modelling objective
+- choosing the cohort restriction and out-of-time validation design
+- deciding which models to compare
+- interpreting model performance, feature importance, and limitations
+- developing the final recommendations and implementation roadmap
+
+AI assistance was used primarily to:
+
+- speed up pandas / scikit-learn implementation
+- help refactor repetitive notebook code
+- draft documentation and slide text from my outlines, results, and talking points
+- sanity-check code structure, formatting, and consistency across deliverables
+
+All AI-assisted code, text, and analysis outputs were reviewed, tested, edited, and accepted by me before inclusion in the final submission.
+
+No Ministry or assignment data containing personal information was sent to external AI tools. The only LLM-related demonstration used a de-identified sample report prepared for the deliverable.
+
+## Usage Log
+
+| Date | Tool | Use |
+|---|---|---|
+| 2026-06-05 | Cursor / Claude | EDA implementation support and discussion of validation design options |
+| 2026-06-07 | Cursor / Claude | Modelling notebook implementation support, logistic regression workflow, and lift chart code |
+| 2026-06-07 | Cursor / Claude | LLM extraction demo using schema-constrained JSON on a de-identified sample report |
+| 2026-06-09 | Cursor / Claude | LightGBM robustness check, permutation importance support, and repo consistency review |
+| 2026-06-09 | Cursor / Claude | Drafting slide outline and speaker notes from my results and talking points |
+| 2026-06-10 | Cursor / Claude | Documentation cleanup, formatting, and final consistency review |
