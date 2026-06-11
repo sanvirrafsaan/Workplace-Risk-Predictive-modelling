@@ -115,7 +115,7 @@ The lift also rises smoothly across all ten ranked groups - the lowest-risk grou
 
 Inspection reports contain risk signals in their written narratives that never make it into the tidy database fields - things like a supervision failure, the involvement of young or new workers, or the specific hazard. I built a small demonstration of capturing that signal.
 
-The approach is **schema-constrained extraction**: I take the report text, remove any personal information, and then ask an LLM to fill in a fixed, predefined form - hazard type, severity, was there a supervision failure (yes/no), were vulnerable workers involved (yes/no), and so on. The LLM's only job is to read messy text and return structured, predictable fields. The demonstration on one of the sample reports is saved at `data/processed/llm_extraction_example.json`.
+The approach is **schema-constrained extraction**: I take the report text, remove any personal information (ensuring commitment to FIPPA), and then ask an LLM to fill in a fixed, predefined form - hazard type, severity, was there a supervision failure (yes/no), were vulnerable workers involved (yes/no), and so on. The LLM's only job is to read messy text and return structured, predictable fields. The demonstration on one of the sample reports is saved at `data/processed/llm_extraction_example.json`.
 
 I chose this **extraction** approach over **text embeddings** (a technique that turns text into long lists of abstract numbers) on purpose. Named, structured fields can be explained to executives, audited, and challenged by inspectors, while abstract embedding numbers cannot. In production this would run on an in-tenant Azure OpenAI deployment, and the LLM's role would stay strictly limited to structuring text - it would never assign risk or trigger enforcement on its own.
 
@@ -139,18 +139,3 @@ These are the issues I would raise unprompted in any real deployment conversatio
 The prototype is a one-time snapshot. A production version would be a **scheduled scoring job**: refresh each workplace's features from the live case system monthly, score every workplace, and surface a ranked list - each with its top reason codes - inside the inspectors' existing planning tools. The model would be retrained each year as a new year of outcomes becomes available. The LLM extraction step would run in batch over inspection narratives to enrich the features. Crucially, governance - monitoring for the model drifting over time, fairness audits, and the random-inspection holdout - would be built in from day one, not added as an afterthought.
 
 ---
-
-## 10. Repository guide
-
-
-| Path                                | Contents                                                                                |
-| ----------------------------------- | --------------------------------------------------------------------------------------- |
-| `scripts/01_data_exploration.ipynb` | Initial data exploration: format changes across years, target volume checks, base rates |
-| `scripts/02_modeling_table.ipynb`   | Builds the workplace-level table (one row per workplace: features + target)             |
-| `scripts/03_model.ipynb`            | The logistic regression model, lift chart, and coefficients                             |
-| `scripts/04_boosting_shap.ipynb`    | The LightGBM robustness check and permutation importance                                |
-| `data/processed/`                   | The modeling table, lift chart, feature-importance chart, and LLM extraction example    |
-| `files/`                            | The executive slide deck and speaker script                                             |
-
-
-Setup and reproduction steps are in `README.md`.
