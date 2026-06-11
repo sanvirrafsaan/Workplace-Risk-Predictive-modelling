@@ -1,108 +1,151 @@
 # Technical Documentation — Predictive Risk Identification
 
-This document describes the methodology, data, modeling decisions, and limitations behind the prototype I built for Option 1 of the assignment: identifying high-risk workplaces so the Ministry can target OHS inspections more effectively.
+This document explains how I built the prototype for Option 1 of the assignment: a way to identify high-risk workplaces so the Ministry can target its Occupational Health and Safety (OHS) inspections more effectively. I have written it so that both a technical reader and a non-technical reader can follow it — where I use a technical term, I explain it in plain language the first time it appears.
 
-The short version: I built a workplace-level risk model on Ontario's public OHS field visit data (2017–2023). Scoring workplaces with a logistic regression and inspecting the top 10% would surface serious enforcement outcomes at roughly 4x the rate of the current baseline. I also prototyped an LLM extraction step that turns free-text inspection reports into structured risk features.
+**The short version:** I built a model that scores each workplace by how likely it is to receive a serious enforcement action. I trained it on Ontario's public OHS field-visit data (2017–2023). If inspectors used this model to visit the top 10% of scored workplaces, they would find serious problems about **4 times more often** than they do with untargeted visits. I also built a small demonstration of using a large language model (an "LLM" — the same kind of AI behind tools like ChatGPT) to turn free-text inspection reports into structured, usable data.
 
 ---
 
 ## 1. Problem framing
 
-The Ministry wants to move from reactive to proactive inspection targeting. I framed this as a ranking problem rather than a prediction problem: we don't need to predict individual accidents (which is statistically fragile and ethically fraught), we need to rank workplaces so that limited inspection capacity is spent where serious findings are most likely.
+The Ministry wants to move from **reactive** inspections (going out after a complaint, injury, or fatality) to **proactive** ones (choosing where to go before harm happens). Inspectors are a scarce resource, and in any given year most workplaces are never visited, so the question is: *where do we send them to do the most good?*
 
-Two framing decisions drove everything downstream:
+I deliberately framed this as a **ranking problem**, not a prediction-of-accidents problem. In other words, the goal is not to predict whether a specific accident will happen at a specific site — that is statistically unreliable and ethically fraught. The goal is to **sort** workplaces from highest to lowest risk so that limited inspection capacity goes where serious findings are most likely.
 
-- **Unit of analysis: the workplace.** FIRE treats the workplace as the inspected entity — NAICS codes, locations, and orders all attach to it. Field-visit grain would leak multiple correlated rows per workplace into the same period; organization grain blurs multi-site patterns. Workplace scores can still be rolled up to organizations for executive reporting.
-- **Target: a proxy for serious risk, not harm itself.** Critical injuries and fatalities are too rare to train on. Instead I used serious enforcement actions — Stop Use/Stop Work Orders and Time Unknown Orders — which the data dictionary defines as signaling immediate danger. The fatalities data is reserved for narrative validation only.
+Two early decisions shaped everything else:
+
+- **What counts as one "thing" we score — the workplace.** The data records activity at a few different levels: individual field visits, workplaces, and organizations (a company that may own several workplaces). I chose the **workplace** as the unit. The Ministry's case system already treats the workplace as the inspected entity — industry code, location, and orders all attach to it. Scoring individual visits would put many related rows for the same site into the model and let them "echo" each other; scoring whole organizations would blur differences between a company's safe and unsafe sites. Workplace scores can still be added up to the organization level later for executive reporting.
+
+- **What we actually predict — a stand-in for serious risk, not harm itself.** Critical injuries and fatalities are, thankfully, rare. There are too few of them to train a reliable model on. So instead of predicting injuries directly, I predict **serious enforcement actions** — specifically **Stop Use / Stop Work Orders** and **Time Unknown Orders**. The data dictionary defines these as orders an inspector issues when something is dangerous enough to halt work immediately. They are the best available signal that a site was genuinely unsafe. (The separate fatalities dataset is used only as a sanity-check narrative, never as a training target — it is too sparse and coarse to model.)
+
+---
 
 ## 2. Data
 
-| Source | Use |
+| Source | How I used it |
 |---|---|
-| Ontario OHS field visits, 2017–2024 (Ontario Data Catalogue) | Primary modeling data (~120k rows/year) |
-| Sample inspection reports (3 provided) | LLM extraction demo |
-| WSIB sector injury rates | Optional sector-level baseline feature |
-| Allowed traumatic fatalities | Validation narrative only — too sparse and coarse to train on |
+| Ontario OHS field visits, 2017–2024 (Ontario Data Catalogue) | Main data for the model (~120k rows per year) |
+| Sample inspection reports (3 provided) | Demonstration of the LLM text-extraction step |
+| WSIB sector injury rates | Considered as an optional external "industry baseline" input (see §4) |
+| Allowed traumatic fatalities | Validation narrative only — too sparse to train on |
 
-A few schema notes that mattered in practice:
+A few practical notes about the data that affected the build:
 
-- File schemas drift across years. 2021–2022 add extra ID columns; 2024 renames the ACT/contravener fields and splits stop-work orders into four subtypes (`STOP A057-6a/b/c/8`) with different casing on time-unknown orders. I stacked 2017–2023 on a shared core column set (`WORKPLACE ID`, `ORDER TYPE`, `CASE TYPE`, `FIELD VISIT DATE`, `PRIMARY NAICS`, `ORDER STATUS`) and held 2024 out rather than risk silently mislabeling the target.
-- Order type strings are year-specific, so the serious-order label uses explicit per-year mappings rather than one hardcoded list.
+- **The file format changed from year to year.** The 2021–2022 files add extra ID columns; the 2024 file renames key fields and splits stop-work orders into four sub-types with inconsistent capitalization. To avoid silently mislabeling my target, I combined 2017–2023 using a shared set of core columns (workplace ID, order type, case type, field-visit date, primary industry code, order status) and **deliberately held the 2024 file aside** rather than rush a fragile mapping of the renamed fields.
+- **The exact wording of order types differs by year**, so the rule that decides "is this a serious order?" uses an explicit, per-year list of the right strings rather than one hardcoded list that would quietly miss some.
 
-## 3. Target and cohort definition
+---
 
-**Target:** binary, at workplace grain — did the workplace receive at least one Stop Use/Stop Work Order or Time Unknown Order in calendar year 2023?
+## 3. Target and how I chose which workplaces to evaluate
 
-**Snapshot design:** features are computed from all activity for the workplace from 2017 through 2022-12-31; the target is observed in 2023. This is an out-of-time split by construction — it simulates exactly how the model would be used ("score workplaces on their history, plan next year's inspections") and avoids the leakage that a random 80/20 split would introduce.
+**The target (the thing the model learns to predict):** a yes/no label for each workplace — *did this workplace receive at least one Stop Use / Stop Work Order or Time Unknown Order during 2023?*
 
-**Evaluation cohort:** workplaces with at least one visit in 2017–2022 *and* at least one visit in 2023 — 12,234 workplaces, with an 8.0% positive rate. This restriction matters. If I had included every historical workplace, the positive rate drops to ~0.6%, but most of those zeros mean "never re-inspected," not "safe." Labels only exist where the Ministry chose to inspect, so honest evaluation requires restricting to workplaces where the label was actually observable. Scores for never-revisited workplaces are extrapolations and I treat them as such (see Limitations).
+**The "snapshot" design — and why it avoids cheating.** I calculate every input feature from the workplace's history through **2022-12-31**, and I measure the target in **2023**. This is what's called an **out-of-time split**: the model only ever "sees the past" to predict "the future." This matters because it mirrors exactly how the model would be used in real life — *score each workplace on its history, then plan next year's inspections.* The common alternative, a random split of the rows, would let information from 2023 leak into training and make the results look better than they really are. I avoided that on purpose.
 
-I checked label stability before committing to a single test year: the serious-order rate was ~9.1% in 2022 and ~9.3% in 2023 (all visited workplaces), close enough that one out-of-time test year is defensible for a prototype.
+**Which workplaces I included (the evaluation cohort).** I restricted the analysis to workplaces that had **at least one visit in 2017–2022 and at least one visit in 2023** — **12,234 workplaces**, of which **8.0%** received a serious order in 2023.
 
-## 4. Features
+That restriction is one of the most important judgment calls in the project, so let me explain it. If I had instead kept every workplace that ever appeared, the serious-order rate would drop to about 0.6% — but most of those zeros don't mean "safe," they mean "never re-inspected." We only know the outcome for a workplace if the Ministry actually chose to visit it. So an honest evaluation has to be limited to workplaces where the outcome was genuinely observable. For workplaces that were never revisited, any score the model gives is an educated extrapolation, and I treat it as such (see Limitations).
 
-All features are computed strictly from the 2017–2022 window:
+Before settling on a single test year, I checked that 2023 wasn't a fluke: the serious-order rate among all visited workplaces was about 9.1% in 2022 and 9.3% in 2023 — close enough that using one out-of-time test year is reasonable for a prototype.
 
-1. **Enforcement history** — order counts, stop-work counts, time-unknown counts, contraventions per visit
-2. **Compliance behavior** — share of orders complied / not complied, repeat outstanding orders
-3. **Inspection cadence** — days since last visit, visit count, investigation-to-inspection ratio
-4. **Sector baseline** — historical serious-order rate at 2-digit NAICS (computed out-of-fold to avoid target leakage), with WSIB sector injury rates as an optional external prior
-5. **Geography** — coarse region from postal code
+---
 
-Count features are `log1p`-transformed; NAICS is rolled up to 2-digit sector to keep coefficients stable and readable.
+## 4. Features (the inputs the model uses)
 
-## 5. Modeling
+A **feature** is just a measurable input the model uses to make its prediction. All of mine are computed strictly from the 2017–2022 window so that nothing from the future leaks in. They fall into a few intuitive groups:
 
-**Primary model: logistic regression** with `class_weight='balanced'`. This was a deliberate choice, not a fallback. In an enforcement context the Ministry must be able to explain why a workplace was flagged — odds ratios and reason codes meet that bar; an opaque score does not.
+1. **Enforcement history** — how many orders, stop-work orders, and time-unknown orders the workplace has received in the past, and how many investigations it has had.
+2. **Compliance behaviour** — the share of past orders the workplace actually complied with, plus a flag for whether it has any order history at all.
+3. **Inspection cadence** — how recently we last visited, and how many times we've visited.
+4. **Industry** — the workplace's industry, captured through its NAICS code (explained below).
 
-**Robustness check: LightGBM** (`scripts/04_boosting_shap.ipynb`). This step turned out to be the most instructive part of the project. In-sample, LightGBM showed a 7.15x lift with ROC-AUC 0.97 — clearly memorization. Compared honestly with out-of-fold cross-validation, the two models are tied: logistic at 4.00x lift / 0.311 PR-AUC vs LightGBM at 3.73x / 0.284. Since boosting buys no accuracy here, I kept the fully interpretable model. I left both the inflated in-sample number and the honest cross-validated number in the notebook on purpose, because the gap between them is the whole argument for proper validation.
+**A note on NAICS.** NAICS is the standard North American industry classification — basically a code for "what kind of work happens here" (construction, mining, healthcare, etc.). The codes are hierarchical: the more digits, the more specific. I rolled each code up to its **2-digit sector level** (for example, `23` = Construction) rather than using the full, very specific 6-digit code. The fine-grained codes are too sparse — many would have only a handful of workplaces — and the broad sector is where the risk patterns actually show up and stay readable.
 
-For feature attribution I used permutation importance (SHAP had a libllvmlite/numpy conflict in my environment; permutation importance is model-agnostic and answers the same question for this use case). Top drivers — industry sector, prior enforcement history, recency of visits, and compliance rate — are consistent between the boosted model and the logistic coefficients, which adds confidence the signal is real rather than a model artifact.
+**Two small data-preparation steps worth explaining:**
 
-## 6. Evaluation
+- **`log1p` on the count features.** The count columns (number of orders, visits, etc.) are *heavy-tailed*: most workplaces have small numbers, but a few have very large ones (one had 771 orders). Feeding raw counts to this kind of model lets those few extreme workplaces dominate. The standard fix is to take the logarithm of the counts (`log1p` means "log of 1 + the value", which also handles zeros cleanly). This compresses the big numbers so the relationship the model is looking for behaves more sensibly. In plain terms: it stops a handful of outlier sites from drowning out everyone else.
+- **One-hot encoding the industry sector.** A model needs numbers, not text labels like "Construction." **One-hot encoding** turns a single text column into several yes/no (1/0) columns — one per sector — so the model can learn a separate weight for each industry.
 
-**Primary metric: lift in the top decile.** Accuracy is meaningless at an 8% base rate, and ROC-AUC doesn't map to the operational question. Lift@10% answers it directly: if inspectors visit the top 10% of scored workplaces, how much richer in serious findings is that list than the status quo?
+*On WSIB injury rates:* I considered adding province-wide injury rates by industry as an external "baseline risk" input. In the final prototype, industry risk is captured through the one-hot sector feature above; the WSIB rates are noted as a sensible enrichment for a production version rather than something I baked into this prototype.
+
+---
+
+## 5. The model
+
+**Primary model: logistic regression.** Logistic regression is a well-understood, transparent model. For each workplace it outputs a **probability between 0 and 1** — its estimated likelihood of receiving a serious order. Importantly, it does this by giving each feature a **weight (coefficient)**, which means you can read off *why* a workplace scored the way it did. I chose it deliberately, not as a fallback: in an enforcement setting the Ministry must be able to explain why a workplace was flagged. A transparent score with clear reasons meets that bar; a black-box score does not.
+
+I used the setting `class_weight='balanced'`. Because only 8% of workplaces are positive, a naive model could score everything "low risk" and still look accurate. This setting tells the model to pay proportionally more attention to the rare positive cases so it actually learns to find them.
+
+**Robustness check: a gradient-boosting model (LightGBM).** This was the most instructive part of the project, so I'll explain it carefully. **Gradient boosting** is a more complex, more flexible family of models that can capture intricate patterns — but that flexibility makes it prone to *memorizing* the training data instead of learning generalizable signal.
+
+When I fit LightGBM and scored it on the **same** rows it was trained on ("in-sample"), it looked spectacular — a 7.15x lift. That number is misleading: the model had simply memorized the answers. The honest way to compare two models is **cross-validation**, where you repeatedly train on part of the data and score the part that was held out, so a model never grades its own homework. Under that fair comparison, the two models are essentially tied: logistic regression at **4.00x lift** versus LightGBM at **3.73x**.
+
+Because the complex model bought no real accuracy, I kept the simple, fully explainable one. I deliberately left *both* the inflated in-sample number and the honest cross-validated number in the notebook, because the gap between them is the whole point: it's the argument for validating properly.
+
+**How I identified the most important drivers.** To see which features mattered most, I used **permutation importance**: you randomly shuffle one feature's values and measure how much the model's performance drops. A big drop means the feature was important; little drop means it wasn't. It's a model-agnostic method — it works on any model and is easy to explain to a non-technical audience. (I would normally use a method called SHAP for this, but it had a software-dependency conflict in my environment, and permutation importance answers the same question here.) The top drivers — industry sector, prior enforcement history, how recently the site was visited, and compliance rate — were consistent between the boosted model and the logistic model's coefficients, which gives me confidence the signal is real and not an artifact of one particular model.
+
+---
+
+## 6. Evaluation — how I measured success
+
+**My primary metric: lift in the top 10% ("top decile").** Accuracy is meaningless here — with an 8% base rate, a model that says "no" to everyone is 92% accurate and completely useless. So I measure **lift**, which answers the operational question directly: *if inspectors visit the top 10% of workplaces ranked by the model, how much richer in serious findings is that group than a random selection would be?*
+
+To get it, I score every workplace, sort them from highest to lowest, take the top 10%, and compare that group's serious-order rate to the overall 8% baseline.
 
 | Metric | Result |
 |---|---|
-| Baseline serious-order rate | 8.0% |
-| Top-decile rate | 32.5% in-sample, ~32% cross-validated |
-| Lift @ top 10% (logistic) | ~4.0x (4.08x in-sample, 4.00x CV) |
-| Lift @ top 10% (LightGBM, CV) | 3.73x |
-| PR-AUC / ROC-AUC (logistic, CV) | 0.31 / 0.80 |
+| Baseline serious-order rate (all workplaces) | 8.0% |
+| Serious-order rate in the top 10% | 32.5% in-sample, ~32% cross-validated |
+| **Lift in the top 10% (logistic)** | **~4.0x** (4.08x in-sample, 4.00x cross-validated) |
+| Lift in the top 10% (LightGBM, cross-validated) | 3.73x |
+| PR-AUC / ROC-AUC (logistic, cross-validated) | 0.31 / 0.80 |
 
-Lift is monotonic across all ten deciles (`data/processed/lift_chart.png`), which suggests the score is meaningful across the whole range, not just at the top cut.
+The last row lists two secondary, more technical ranking scores. In plain terms, both measure how well the model sorts risky workplaces above safe ones. **ROC-AUC of 0.80** means that if you picked one risky and one safe workplace at random, the model would rank the risky one higher about 80% of the time — solid. **PR-AUC** is a stricter measure that focuses on the rare positive cases; 0.31 sounds low but is normal and respectable when only 8% of cases are positive. I report these for completeness, but the headline number is the lift.
 
-## 7. LLM component
+The lift also rises smoothly across all ten ranked groups — the lowest-risk group is near zero and each group up is riskier, peaking at the top — which tells me the score is meaningful across the whole range, not just at the very top cut. The chart of this is saved at `data/processed/lift_chart.png`.
 
-Inspection narratives contain risk signal that never makes it into structured FIRE fields — supervision failures, vulnerable workers, hazard specifics. I prototyped schema-constrained JSON extraction: de-identify the report text, then prompt an LLM to fill a fixed schema (hazard type, severity, supervision failure flag, vulnerable worker flag, etc.). The demo on one of the sample reports is in `data/processed/llm_extraction_example.json`.
+**How the "top 3 reasons" would work.** Because logistic regression assigns each feature a weight, for any individual workplace you can multiply each feature's value by its weight to see how much it contributed to that workplace's score, then surface the three largest contributors as plain-English reasons (e.g. "high prior order volume," "construction sector," "prior stop-work orders"). This is what would power the reason codes in a planner's dashboard. It is the model explaining its own decision — not a separate correlation analysis.
 
-I chose extraction over text embeddings deliberately. Named, auditable features can be explained to executives and challenged by inspectors; embedding dimensions cannot. In production this would run on an in-tenant Azure OpenAI deployment, and the LLM's role is strictly to structure text — it never assigns risk or triggers enforcement on its own.
+---
+
+## 7. The LLM (text) component
+
+Inspection reports contain risk signals in their written narratives that never make it into the tidy database fields — things like a supervision failure, the involvement of young or new workers, or the specific hazard. I built a small demonstration of capturing that signal.
+
+The approach is **schema-constrained extraction**: I take the report text, remove any personal information, and then ask an LLM to fill in a fixed, predefined form — hazard type, severity, was there a supervision failure (yes/no), were vulnerable workers involved (yes/no), and so on. The LLM's only job is to read messy text and return structured, predictable fields. The demonstration on one of the sample reports is saved at `data/processed/llm_extraction_example.json`.
+
+I chose this **extraction** approach over **text embeddings** (a technique that turns text into long lists of abstract numbers) on purpose. Named, structured fields can be explained to executives, audited, and challenged by inspectors; abstract embedding numbers cannot. In production this would run on an in-tenant Azure OpenAI deployment, and the LLM's role would stay strictly limited to *structuring text* — it would never assign risk or trigger enforcement on its own.
+
+---
 
 ## 8. Assumptions and limitations
 
-These are the things I would raise unprompted in any deployment conversation:
+These are the issues I would raise unprompted in any real deployment conversation:
 
-- **Selection bias.** Labels exist only where the Ministry inspected. The model learns "risk conditional on being the kind of workplace that gets inspected." Mitigation: reserve a slice of inspection capacity for random/exploratory visits to generate unbiased labels over time.
-- **Feedback loops.** If targeting becomes 100% model-driven, the model eventually only sees its own choices. The exploration capacity above also addresses this.
-- **Proxy target.** Serious orders are not injuries. The model identifies elevated likelihood of serious enforcement findings; it does not predict accidents, and I would never present it as doing so.
-- **Privacy.** Inspection text and supporting materials contain personal information. De-identification before any LLM processing is mandatory (FIPPA/PHIPA), and processing must stay in-tenant.
-- **Fairness.** Risk scores should be audited by region, sector, and workplace size before deployment so that targeting doesn't simply amplify historical inspection patterns.
-- **2024 data held out.** Schema changes meant I excluded 2024 from the prototype rather than rush a rename map. With more time, 2024 becomes a second out-of-time test year.
+- **Selection bias.** We only know outcomes for workplaces the Ministry chose to inspect. So the model really learns "risk, *given that this is the kind of workplace we tend to inspect*." The mitigation is to reserve a slice of inspection capacity for random or exploratory visits, which generate unbiased labels over time.
+- **Feedback loops.** If targeting became 100% model-driven, the model would eventually only ever see the workplaces it already chose, reinforcing its own blind spots. The exploratory-inspection capacity above addresses this too.
+- **The target is a proxy.** Serious orders are a stand-in for danger, not injuries themselves. The model identifies an elevated likelihood of serious enforcement findings; I would never present it as predicting accidents.
+- **Privacy.** Inspection text contains personal and health information. De-identifying it before any LLM processing is mandatory under Ontario's privacy laws (FIPPA/PHIPA), and processing must stay within the Ministry's own secure environment.
+- **Fairness.** Before deployment, the scores should be audited across region, industry, and workplace size so that targeting doesn't simply amplify whoever has historically been inspected the most.
+- **2024 data held out.** The 2024 file's renamed fields meant I excluded it rather than risk mislabeling the target. With more time, 2024 would become a valuable second out-of-time test year.
 
-## 9. What production would look like
+---
 
-The prototype is a snapshot pipeline; production would be a scheduled scoring job: refresh workplace features from FIRE monthly, score the full register, surface ranked lists with reason codes in the inspectors' workflow, and retrain annually with the newest labeled year. The LLM extraction step would run in batch over inspection narratives to enrich the feature set. Model governance — drift monitoring, fairness audits, and the random-inspection holdout — would be part of the operating procedure from day one, not an afterthought.
+## 9. What a production version would look like
+
+The prototype is a one-time snapshot. A production version would be a **scheduled scoring job**: refresh each workplace's features from the live case system monthly, score every workplace, and surface a ranked list — each with its top reason codes — inside the inspectors' existing planning tools. The model would be retrained each year as a new year of outcomes becomes available. The LLM extraction step would run in batch over inspection narratives to enrich the features. Crucially, governance — monitoring for the model drifting over time, fairness audits, and the random-inspection holdout — would be built in from day one, not added as an afterthought.
+
+---
 
 ## 10. Repository guide
 
 | Path | Contents |
 |---|---|
-| `scripts/01_data_exploration.ipynb` | EDA: schema drift across years, target volume checks, base rates |
-| `scripts/02_modeling_table.ipynb` | Builds the workplace-level modeling table (features + target) |
-| `scripts/03_model.ipynb` | Logistic regression, lift chart, coefficients |
-| `scripts/04_boosting_shap.ipynb` | LightGBM robustness check, permutation importance |
-| `data/processed/` | Modeling table, lift chart, feature importance, LLM extraction example |
-| `files/` | Executive slide deck and speaker script |
+| `scripts/01_data_exploration.ipynb` | Initial data exploration: format changes across years, target volume checks, base rates |
+| `scripts/02_modeling_table.ipynb` | Builds the workplace-level table (one row per workplace: features + target) |
+| `scripts/03_model.ipynb` | The logistic regression model, lift chart, and coefficients |
+| `scripts/04_boosting_shap.ipynb` | The LightGBM robustness check and permutation importance |
+| `data/processed/` | The modeling table, lift chart, feature-importance chart, and LLM extraction example |
+| `files/` | The executive slide deck and speaker script |
 
 Setup and reproduction steps are in `README.md`.

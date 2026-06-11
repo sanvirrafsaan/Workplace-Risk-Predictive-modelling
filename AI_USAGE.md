@@ -18,7 +18,7 @@ All major analytical and design decisions were made by me, including:
 AI assistance was used primarily to:
 
 - speed up pandas / scikit-learn implementation
-- help refactor repetitive notebook code
+- help write down repetitive notebook code
 - draft documentation and slide text from my outlines, results, and talking points
 - sanity-check code structure, formatting, and consistency across deliverables
 
@@ -28,11 +28,14 @@ No Ministry or assignment data containing personal information was sent to exter
 
 ## Usage Log
 
-| Date | Tool | Use |
-|---|---|---|
-| 2026-06-05 | Cursor / Claude | EDA implementation support and discussion of validation design options |
+
+| Date       | Tool            | Use                                                                                          |
+| ---------- | --------------- | -------------------------------------------------------------------------------------------- |
+| 2026-06-05 | Cursor / Claude | EDA implementation support and discussion of validation design options                       |
 | 2026-06-07 | Cursor / Claude | Modelling notebook implementation support, logistic regression workflow, and lift chart code |
-| 2026-06-07 | Cursor / Claude | LLM extraction demo using schema-constrained JSON on a de-identified sample report |
-| 2026-06-09 | Cursor / Claude | LightGBM robustness check, permutation importance support, and repo consistency review |
-| 2026-06-09 | Cursor / Claude | Drafting slide outline and speaker notes from my results and talking points |
-| 2026-06-10 | Cursor / Claude | Documentation cleanup, formatting, and final consistency review |
+| 2026-06-07 | Cursor / Claude | LLM extraction demo using schema-constrained JSON on a de-identified sample report           |
+| 2026-06-09 | Cursor / Claude | LightGBM robustness check, permutation importance support, and repo consistency review       |
+| 2026-06-09 | Cursor / Claude | Drafting slide outline and speaker notes from my results and talking points                  |
+| 2026-06-10 | Cursor / Claude | Documentation cleanup, formatting, and final consistency review                              |
+
+
